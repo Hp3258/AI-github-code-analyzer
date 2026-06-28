@@ -1,0 +1,73 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id          String   @id @default(cuid())
+  githubId    String   @unique @map("github_id")
+  username    String
+  avatarUrl   String?  @map("avatar_url")
+  email       String?
+  accessToken String   @map("access_token")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  repositories Repository[]
+  reviews      Review[]
+
+  @@map("users")
+}
+
+model Repository {
+  id            String   @id @default(cuid())
+  userId        String   @map("user_id")
+  githubUrl     String   @map("github_url")
+  owner         String
+  repoName      String   @map("repo_name")
+  defaultBranch String   @default("main") @map("default_branch")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviews Review[]
+
+  @@map("repositories")
+}
+
+model Review {
+  id           String    @id @default(cuid())
+  repoId       String    @map("repo_id")
+  userId       String    @map("user_id")
+  status       String    @default("pending")
+  qualityScore Int?      @map("quality_score")
+  summary      String?
+  errorMessage String?   @map("error_message")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  completedAt  DateTime? @map("completed_at")
+
+  repository Repository    @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  issues     ReviewIssue[]
+
+  @@map("reviews")
+}
+
+model ReviewIssue {
+  id          String   @id @default(cuid())
+  reviewId    String   @map("review_id")
+  filePath    String   @map("file_path")
+  lineNumber  Int?     @map("line_number")
+  severity    String
+  category    String
+  title       String
+  description String?
+  suggestion  String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@map("review_issues")
+}

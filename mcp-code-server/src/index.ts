@@ -6,10 +6,8 @@ dotenv.config()
 
 const app = express()
 app.use(cors())
-app.use(express.json())
-
-// This server does pure static analysis — no external API calls
-// Everything here is rule-based logic running in memory
+app.use(express.json({ limit: '10mb' }))
+app.use(express.urlencoded({ limit: '10mb', extended: true }))
 
 const tools = [
   {
@@ -50,7 +48,6 @@ const tools = [
   }
 ]
 
-// ── LANGUAGE DETECTION ──────────────────────────────────────────
 function detectLanguage(path: string): string {
   const ext = path.split('.').pop()?.toLowerCase()
   const map: Record<string, string> = {
@@ -67,12 +64,6 @@ function detectLanguage(path: string): string {
   return map[ext || ''] || 'Unknown'
 }
 
-// ── COMPLEXITY ANALYSIS ──────────────────────────────────────────
-// Cyclomatic complexity = number of decision points + 1
-// Decision points: if, else if, for, while, switch case, &&, ||, ?, catch
-// Higher = harder to test and maintain
-// 1-10: simple, 11-20: moderate, 21+: complex
-
 function analyzeComplexity(content: string, path: string) {
   const lines = content.split('\n')
   const totalLines = lines.length
@@ -80,7 +71,6 @@ function analyzeComplexity(content: string, path: string) {
   const commentLines = lines.filter(l => l.trim().startsWith('//') || l.trim().startsWith('*')).length
   const codeLines = totalLines - emptyLines - commentLines
 
-  // Count decision points for cyclomatic complexity
   const decisionPatterns = [
     /\bif\b/g, /\belse if\b/g, /\bfor\b/g,
     /\bwhile\b/g, /\bcase\b/g, /\bcatch\b/g,
@@ -93,11 +83,8 @@ function analyzeComplexity(content: string, path: string) {
     if (matches) complexityScore += matches.length
   })
 
-  // Find long functions (rough detection)
   const functionMatches = content.match(/function\s+\w+|=>\s*{|async\s+\w+/g)
   const functionCount = functionMatches?.length || 0
-
-  // Average lines per function
   const avgLinesPerFunction = functionCount > 0
     ? Math.round(codeLines / functionCount)
     : codeLines
@@ -117,10 +104,6 @@ function analyzeComplexity(content: string, path: string) {
   }
 }
 
-// ── SECURITY PATTERN CHECKS ──────────────────────────────────────
-// Rule-based detection — catches ~80% of common issues without LLM
-// The remaining 20% gets passed to Gemini in Agent 2
-
 interface SecurityIssue {
   severity: 'critical' | 'high' | 'medium' | 'low'
   category: string
@@ -137,7 +120,6 @@ function checkSecurityPatterns(content: string, path: string): SecurityIssue[] {
     const lineNum = index + 1
     const trimmed = line.trim()
 
-    // Hardcoded secrets
     if (/password\s*=\s*['"][^'"]{3,}['"]/i.test(trimmed) ||
         /secret\s*=\s*['"][^'"]{3,}['"]/i.test(trimmed) ||
         /api_key\s*=\s*['"][^'"]{3,}['"]/i.test(trimmed)) {
@@ -150,7 +132,6 @@ function checkSecurityPatterns(content: string, path: string): SecurityIssue[] {
       })
     }
 
-    // SQL injection risk
     if (/query\s*\(.*\+.*\)/i.test(trimmed) ||
         /execute\s*\(.*\$\{/i.test(trimmed)) {
       issues.push({
@@ -162,7 +143,6 @@ function checkSecurityPatterns(content: string, path: string): SecurityIssue[] {
       })
     }
 
-    // eval() usage
     if (/\beval\s*\(/.test(trimmed)) {
       issues.push({
         severity: 'critical',
@@ -173,7 +153,6 @@ function checkSecurityPatterns(content: string, path: string): SecurityIssue[] {
       })
     }
 
-    // console.log in production code (not test files)
     if (/console\.log\(/.test(trimmed) && !path.includes('test') && !path.includes('spec')) {
       issues.push({
         severity: 'low',
@@ -184,7 +163,6 @@ function checkSecurityPatterns(content: string, path: string): SecurityIssue[] {
       })
     }
 
-    // TODO comments
     if (/\/\/\s*TODO/i.test(trimmed)) {
       issues.push({
         severity: 'low',
@@ -195,7 +173,6 @@ function checkSecurityPatterns(content: string, path: string): SecurityIssue[] {
       })
     }
 
-    // Dangerously set innerHTML
     if (/dangerouslySetInnerHTML/.test(trimmed)) {
       issues.push({
         severity: 'high',
@@ -209,8 +186,6 @@ function checkSecurityPatterns(content: string, path: string): SecurityIssue[] {
 
   return issues
 }
-
-// ── ROUTES ───────────────────────────────────────────────────────
 
 app.get('/', (_req: Request, res: Response) => {
   res.json({ name: 'mcp-code-server', version: '1.0.0', tools })

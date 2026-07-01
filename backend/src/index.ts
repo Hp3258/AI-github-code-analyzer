@@ -10,7 +10,7 @@ dotenv.config()
 
 import './config/passport'
 import { authRouter } from './routes/auth'
-
+import { reviewRouter } from './routes/review'
 const app = express()
 
 app.use(helmet())
@@ -34,6 +34,7 @@ app.use(passport.initialize())
 app.use(passport.session())
 
 app.use('/auth', authRouter)
+app.use('/api/review', reviewRouter)
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
